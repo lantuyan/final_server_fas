@@ -31,6 +31,7 @@ const logCollectionId = process.env.LOG_COLLECTION_ID;
 const applicationChirpStackID = process.env.APPLICATION_CHIRPSTACK_ID;
 const smokeProfileID = process.env.SMOKE_PROFILE_ID;
 const tempHumProfileID = process.env.TEMP_HUM_PROFILE_ID;
+const buttonProfileID = process.env.BUTTON_PROFILE_ID;
 
 
 const mqtt_url = process.env.MQTT_URL;
@@ -112,6 +113,27 @@ export const saveData = () => {
           }
         );
         console.log('Document updated successfully: ', temp.devEUI, "on");
+      }
+
+      if (temp.deviceProfileID == buttonProfileID) {
+        var status = (temp.object.value == 0) ? "on" : "fire";
+        await databases.updateDocument(
+          buildingDatabaseID,
+          sensorCollectionID,
+          temp.devEUI,
+          {
+            name: temp.deviceName.split('_')[0],
+            time: currentDate,
+            timeTurnOn: "",
+            battery: 0,
+            type: temp.deviceProfileName,
+            value: 0,
+            humidity: 0,
+            smoke: 0,
+            temperature: 0,
+            status: status
+          }
+        );
       }
     } catch (error) {
       console.log('Error processing message:', error);
