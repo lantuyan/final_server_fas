@@ -146,6 +146,10 @@ export const saveData = () => {
             status: status
           }
         );
+        if (status == "fire") {
+          sendPushNotiWithUserData()
+        }
+        console.log('Document updated successfully: ', temp.devEUI, status);
       }
     } catch (error) {
       console.log('Error processing message:', error);
