@@ -10,3 +10,24 @@ export function throwIfMissing(obj, keys) {
     }
   }
 
+/**
+ * @param {admin.messaging.Message} payload
+ * @returns {Promise<string>}
+ */
+export async function sendPushNotification(payload) {
+  return await admin.messaging().sendEachForMulticast(payload);
+}
+
+export function isMoreThan5MinutesAgo(dateString, currentDate) {
+  if (!dateString) {
+    return true;
+  }
+
+  const inputDate = new Date(dateString);
+
+  const timeDifference = currentDate - inputDate;
+  const fiveMinutesInMilliseconds = 5 * 60 * 1000;
+
+  // So sánh sự chênh lệch với 5 phút
+  return timeDifference > fiveMinutesInMilliseconds;
+}
