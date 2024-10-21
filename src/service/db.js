@@ -249,6 +249,7 @@ async function sendPushNotiWithUserData() {
             title: title,
             description: body,
             time: currentDate,
+            sensor: item.$id
           }
         );
         
