@@ -1,7 +1,9 @@
 import mqtt from "mqtt"
-import { AppwriteException, Client, Databases, ID } from 'node-appwrite';
-import { throwIfMissing } from '../utils.js';
+import { v4 as uuidv4 } from 'uuid';
+import { AppwriteException, Client, Databases, ID , Query } from 'node-appwrite';
+import { throwIfMissing} from '../utils.js';
 import dotenv from 'dotenv';
+import admin from 'firebase-admin';
 
 dotenv.config();
 
@@ -15,9 +17,19 @@ throwIfMissing(process.env, [
   'APPLICATION_CHIRPSTACK_ID',
   'MQTT_URL',
   'SMOKE_PROFILE_ID',
-  'TEMP_HUM_PROFILE_ID'
+  'TEMP_HUM_PROFILE_ID',
+  'USERS_COLLECTION_ID',
+  'NOTIFICATION_COLLECTION_ID',
 ]);
 
+admin.initializeApp({
+  credential: admin.credential.cert({
+    projectId: process.env.FCM_PROJECT_ID,
+    clientEmail: process.env.FCM_CLIENT_EMAIL,
+    privateKey: process.env.FCM_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  }),
+  databaseURL: process.env.FCM_DATABASE_URL,
+});
 
 const client = new Client();
 client.setEndpoint(process.env.APPWRITE_URL)
@@ -32,9 +44,17 @@ const applicationChirpStackID = process.env.APPLICATION_CHIRPSTACK_ID;
 const smokeProfileID = process.env.SMOKE_PROFILE_ID;
 const tempHumProfileID = process.env.TEMP_HUM_PROFILE_ID;
 const buttonProfileID = process.env.BUTTON_PROFILE_ID;
+const userCollectionID = process.env.USERS_COLLECTION_ID;
+const notificationCollectionID = process.env.NOTIFICATION_COLLECTION_ID;
 
 
 const mqtt_url = process.env.MQTT_URL;
+const Status = {
+  ON: 'on',
+  OFF: 'off',
+  WARNING: 'warning',
+  FIRE: 'fire'
+};
 
 export const saveData = () => {
   var client_mqtt = mqtt.connect(mqtt_url)
@@ -81,16 +101,10 @@ export const saveData = () => {
             lastNotification: null
           }
         );
-        // if (status == "fire") {
-        //   await databases.updateDocument(
-        //     buildingDatabaseID,
-        //     sensorCollectionID,
-        //     temp.devEUI,
-        //     {
-        //       lastNotification: currentDate,
-        //     }
-        //   );
-        // }
+        if (status == "fire") {
+          sendPushNotiWithUserData()
+
+        }
         console.log('Document updated successfully: ', temp.devEUI, status);
       }
 
@@ -134,6 +148,10 @@ export const saveData = () => {
             status: status
           }
         );
+        if (status == "fire") {
+          sendPushNotiWithUserData()
+        }
+        console.log('Document updated successfully: ', temp.devEUI, status);
       }
     } catch (error) {
       console.log('Error processing message:', error);
@@ -165,4 +183,102 @@ async function logAppwrite(log) {
   } catch (error) {
     console.log('Error logging:', error);
   }
+}
+
+async function sendPushNotiWithUserData() {
+  try {
+    const users = await databases.listDocuments(
+      buildingDatabaseID,
+      userCollectionID,
+      [Query.limit(100000), Query.offset(0)]
+    );
+
+    const deviceTokens = users.documents
+      .map((document) => document.deviceToken)
+      .filter((token) => token !== null && token.trim() !== '');
+
+   console.log('deviceTokens size: ' + deviceTokens.length);
+    
+    const promise = await databases.listDocuments(
+      buildingDatabaseID,
+      sensorCollectionID,
+      [Query.limit(100000), Query.offset(0)]
+    );
+
+    const currentDate = new Date();
+   console.log('currentDate: ' + currentDate);
+    
+    promise.documents.forEach(async (item) => {
+      const inputDate = new Date(item.lastNotification);
+      const isValidTimeout = isMoreThan5MinutesAgo(item.lastNotification, currentDate);
+
+     console.log('-------------- ' + item.name + ' --------------')
+     console.log('lastNotification: ' + item.lastNotification);
+     console.log('inputDate: ' + inputDate);
+     console.log('isMoreThan5MinutesAgo: ' + isValidTimeout);
+
+      if (item.status == Status.FIRE && isValidTimeout) {
+       console.log('Send Push Notification');
+        const body = 'Thiết bị ' +item.name +' đang ở mức độ cảnh báo cháy';
+        const title = 'Cảnh báo cháy';
+        await sendPushNotification({
+          data: {
+            title: title,
+            body: body,
+            "$id": String(item.$id),
+            "name": String(item.name),
+            "time": String(item.time),
+            "timeTurnOn": String(item.timeTurnOn),
+            "battery": String(item.battery),
+            "type": String(item.type),
+            "value": String(item.value),
+            "status": String(item.status),
+          },
+          tokens: deviceTokens,
+        });
+
+       console.log('Successfully sent message');
+       const uniqueID = uuidv4();
+
+        await databases.createDocument(
+          buildingDatabaseID,
+          notificationCollectionID,
+          uniqueID,
+          {
+            sensorID: item.$id,
+            title: title,
+            description: body,
+            time: currentDate,
+            sensor: item.$id
+          }
+        );
+        
+       console.log('Successfully create notification document');
+
+      } else {
+       console.log('Do nothing');
+        return ;
+      }
+    });
+  } catch (e) {
+    // error('Errors:' + e);
+  }
+}
+
+async function sendPushNotification(payload) {
+  return await admin.messaging().sendEachForMulticast(payload);
+}
+
+function isMoreThan5MinutesAgo(dateString, currentDate) {
+  if (!dateString) {
+    return true;
+  }
+
+  const inputDate = new Date(dateString);
+
+  const timeDifference = currentDate - inputDate;
+  const fiveMinutesInMilliseconds = 5 * 60 * 1000;
+
+  // So sánh sự chênh lệch với 5 phút
+  return timeDifference > fiveMinutesInMilliseconds;
 }
