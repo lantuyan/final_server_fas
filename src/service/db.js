@@ -1,6 +1,7 @@
 import mqtt from "mqtt"
+import { v4 as uuidv4 } from 'uuid';
 import { AppwriteException, Client, Databases, ID , Query } from 'node-appwrite';
-import { throwIfMissing, isMoreThan5MinutesAgo } from '../utils.js';
+import { throwIfMissing} from '../utils.js';
 import dotenv from 'dotenv';
 import admin from 'firebase-admin';
 
@@ -102,6 +103,7 @@ export const saveData = () => {
         );
         if (status == "fire") {
           sendPushNotiWithUserData()
+
         }
         console.log('Document updated successfully: ', temp.devEUI, status);
       }
@@ -195,7 +197,7 @@ async function sendPushNotiWithUserData() {
       .map((document) => document.deviceToken)
       .filter((token) => token !== null && token.trim() !== '');
 
-    log('deviceTokens size: ' + deviceTokens.length);
+   console.log('deviceTokens size: ' + deviceTokens.length);
     
     const promise = await databases.listDocuments(
       buildingDatabaseID,
@@ -204,19 +206,19 @@ async function sendPushNotiWithUserData() {
     );
 
     const currentDate = new Date();
-    log('currentDate: ' + currentDate);
+   console.log('currentDate: ' + currentDate);
     
     promise.documents.forEach(async (item) => {
       const inputDate = new Date(item.lastNotification);
       const isValidTimeout = isMoreThan5MinutesAgo(item.lastNotification, currentDate);
 
-      log('-------------- ' + item.name + ' --------------')
-      log('lastNotification: ' + item.lastNotification);
-      log('inputDate: ' + inputDate);
-      log('isMoreThan5MinutesAgo: ' + isValidTimeout);
+     console.log('-------------- ' + item.name + ' --------------')
+     console.log('lastNotification: ' + item.lastNotification);
+     console.log('inputDate: ' + inputDate);
+     console.log('isMoreThan5MinutesAgo: ' + isValidTimeout);
 
       if (item.status == Status.FIRE && isValidTimeout) {
-        log('Send Push Notification');
+       console.log('Send Push Notification');
         const body = 'Thiết bị ' +item.name +' đang ở mức độ cảnh báo cháy';
         const title = 'Cảnh báo cháy';
         await sendPushNotification({
@@ -235,12 +237,13 @@ async function sendPushNotiWithUserData() {
           tokens: deviceTokens,
         });
 
-        log('Successfully sent message');
+       console.log('Successfully sent message');
+       const uniqueID = uuidv4();
 
         await databases.createDocument(
           buildingDatabaseID,
           notificationCollectionID,
-          ID.Unique(),
+          uniqueID,
           {
             sensorID: item.$id,
             title: title,
@@ -249,14 +252,32 @@ async function sendPushNotiWithUserData() {
           }
         );
         
-        log('Successfully create notification document');
+       console.log('Successfully create notification document');
 
       } else {
-        log('Do nothing');
+       console.log('Do nothing');
         return ;
       }
     });
   } catch (e) {
-    error('Errors:' + e);
+    // error('Errors:' + e);
   }
+}
+
+async function sendPushNotification(payload) {
+  return await admin.messaging().sendEachForMulticast(payload);
+}
+
+function isMoreThan5MinutesAgo(dateString, currentDate) {
+  if (!dateString) {
+    return true;
+  }
+
+  const inputDate = new Date(dateString);
+
+  const timeDifference = currentDate - inputDate;
+  const fiveMinutesInMilliseconds = 5 * 60 * 1000;
+
+  // So sánh sự chênh lệch với 5 phút
+  return timeDifference > fiveMinutesInMilliseconds;
 }
