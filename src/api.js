@@ -1,8 +1,17 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import { sendPushNotificationToUser, triggerFireAlarmActions, logAppwrite } from './main.js';
+import { Client, Databases, Query } from 'node-appwrite';
 
 const router = express.Router();
+
+// Initialize Appwrite client
+const client = new Client();
+client.setEndpoint(process.env.APPWRITE_URL)
+  .setProject(process.env.APPWRITE_PROJECT_ID)
+  .setKey(process.env.APPWRITE_API_KEY);
+
+const databases = new Databases(client);
 
 // Fire alarm trigger endpoint
 router.post('/trigger-fire-alarm', async (req, res) => {
@@ -27,6 +36,44 @@ router.post('/trigger-fire-alarm', async (req, res) => {
   } catch (error) {
     console.error('Error triggering fire alarm:', error);
     res.status(500).json({ error: 'Failed to trigger fire alarm' });
+  }
+});
+
+// Reset system endpoint - sets all sensor statuses to offline
+router.post('/reset-system', async (req, res) => {
+  try {
+    // Get all sensors
+    const sensors = await databases.listDocuments(
+      process.env.BUILDING_DATABASE_ID,
+      process.env.SENSOR_COLLECTION_ID,
+      [Query.limit(100000)]
+    );
+
+    // Update each sensor's status to 'off'
+    const updatePromises = sensors.documents.map(sensor => 
+      databases.updateDocument(
+        process.env.BUILDING_DATABASE_ID,
+        process.env.SENSOR_COLLECTION_ID,
+        sensor.$id,
+        {
+          status: 'off',
+          time: new Date()
+        }
+      )
+    );
+
+    await Promise.all(updatePromises);
+
+    // Log the system reset
+    await logAppwrite('System reset: All sensors set to offline status');
+
+    res.status(200).json({ 
+      message: 'System reset successful', 
+      sensorsUpdated: sensors.documents.length 
+    });
+  } catch (error) {
+    console.error('Error resetting system:', error);
+    res.status(500).json({ error: 'Failed to reset system' });
   }
 });
 
