@@ -1,7 +1,7 @@
 import mqtt from "mqtt"
 import { v4 as uuidv4 } from 'uuid';
 import { AppwriteException, Client, Databases, ID, Query } from 'node-appwrite';
-import { throwIfMissing } from '../utils.js';
+import { throwIfMissing } from './utils.js';
 import dotenv from 'dotenv';
 import admin from 'firebase-admin';
 import fetch from 'node-fetch';
@@ -23,7 +23,11 @@ throwIfMissing(process.env, [
   'NOTIFICATION_COLLECTION_ID',
   'CHIRPSTACK_API_TOKEN',
   'CHIRPSTACK_API_URL',
-  'CHIRPSTACK_DOWNLINK_SPEAKER_DATA'
+  'CHIRPSTACK_DOWNLINK_SPEAKER_DATA',
+  'SENSOR_TIMEOUT_MINUTES',
+  'SMOKE_SENSOR_TIMEOUT',
+  'SPEAKER_SENSOR_TIMEOUT',
+  'BUTTON_SENSOR_TIMEOUT'
 ]);
 
 admin.initializeApp({
@@ -65,8 +69,10 @@ const Status = {
 };
 
 export const saveData = () => {
+  // Start the sensor timeout checker
+  const timeoutCheckInterval = setInterval(checkSensorTimeouts, 60000*parseInt(process.env.TIMEOUT_CHECK_INTERVAL)); // Check every 15 minutes
+
   var client_mqtt = mqtt.connect(mqtt_url)
-  // let topicName = `application/90/device/+/event/up`
   const topicName = `application/${applicationChirpStackID}/device/+/event/up`;
 
   client_mqtt.on("connect", function () {
@@ -104,7 +110,8 @@ export const saveData = () => {
         }
         if (status == "fire") {
           console.log("Fire detected by smoke sensor, sending notifications and downlinks");
-          await sendPushNotificationToUser(temp.deviceName);
+          const message = 'Thiết bị ' + temp.deviceName + ' đang ở mức độ cảnh báo cháy';
+          await sendPushNotificationToUser(message, temp.deviceName);
           await triggerFireAlarmActions();
         }
         console.log('Document updated successfully: ', temp.devEUI, status);
@@ -140,7 +147,8 @@ export const saveData = () => {
         }
         if (status == "fire") {
           console.log("Fire detected by smoke sensor, sending notifications and downlinks");
-          await sendPushNotificationToUser(temp.deviceName);
+          const message = 'Thiết bị ' + temp.deviceName + ' đang ở mức độ cảnh báo cháy';
+          await sendPushNotificationToUser(message, temp.deviceName);
           await triggerFireAlarmActions();
 
           var caseTampered = temp.object.data.anti_tamper_status
@@ -158,7 +166,6 @@ export const saveData = () => {
             time: currentDate,
             timeTurnOn: "",
             battery: 0,
-            // type: "Bell-Button",
             value: 0,
             humidity: 0,
             smoke: 0,
@@ -167,6 +174,26 @@ export const saveData = () => {
           }
         );
         console.log('Document updated successfully: ', temp.devEUI, status);
+      }
+      if (temp.deviceProfileID == speakerProfileID) {
+        var status = Status.ON; 
+        await databases.updateDocument(
+          buildingDatabaseID,
+          sensorCollectionID,
+          temp.devEUI,
+          {
+            name: temp.deviceName,
+            time: currentDate,
+            timeTurnOn: "",
+            battery: 0,  
+            value: 0,
+            humidity: 0,
+            smoke: 0,
+            temperature: 0,
+            status: status,
+          }
+        );
+        console.log('Speaker Document updated successfully: ', temp.devEUI, status);
       }
     } catch (error) {
       console.log('Error processing message:', error);
@@ -188,20 +215,64 @@ export const saveData = () => {
   })
 }
 
-async function logAppwrite(log) {
+async function checkSensorTimeouts() {
   try {
-    await databases.createDocument(buildingDatabaseID, logCollectionId, ID.unique(), {
-      log: log,
-      time: new Date().toISOString(),
-      type: "MQTT_AppWrite"
-    });
+    const currentTime = new Date();
+    
+    // Get timeout values from environment variables with defaults
+    const smokeTimeout = parseInt(process.env.SMOKE_SENSOR_TIMEOUT);
+    const speakerTimeout = parseInt(process.env.SPEAKER_SENSOR_TIMEOUT);
+    const buttonTimeout = parseInt(process.env.BUTTON_SENSOR_TIMEOUT);
+    
+    // Get all sensors
+    const sensors = await databases.listDocuments(
+      buildingDatabaseID,
+      sensorCollectionID,
+      [Query.limit(100000)]
+    );
+
+    for (const sensor of sensors.documents) {
+      const lastUpdateTime = new Date(sensor.time);
+      // Calculate the time difference in minutes
+      const timeDifferenceMinutes = (currentTime - lastUpdateTime) / (1000 * 60);
+      
+      // Determine timeout based on device profile
+      let timeoutMinutes;
+      if (sensor.deviceProfileID === smokeProfileID) {
+        timeoutMinutes = smokeTimeout;
+      } else if (sensor.deviceProfileID === speakerProfileID) {
+        timeoutMinutes = speakerTimeout;
+      } else if (sensor.deviceProfileID === buttonProfileID) {
+        timeoutMinutes = buttonTimeout;
+      } else {
+        // Default timeout for unknown device types
+        timeoutMinutes = parseInt(process.env.SENSOR_TIMEOUT_MINUTES);
+      }
+
+      // If sensor hasn't updated in the specified time, mark it as off
+      if (timeDifferenceMinutes > timeoutMinutes && sensor.status !== Status.OFF) {
+        console.log(`Sensor ${sensor.name} (${sensor.$id}) of type ${sensor.deviceProfileID} hasn't updated in ${timeDifferenceMinutes.toFixed(2)} minutes. Timeout limit: ${timeoutMinutes} minutes. Marking as offline.`);
+        
+        await databases.updateDocument(
+          buildingDatabaseID,
+          sensorCollectionID,
+          sensor.$id,
+          {
+            status: Status.OFF,
+            time: currentTime
+          }
+        );
+
+        await logAppwrite(`Sensor ${sensor.name} marked as offline due to inactivity (Type: ${sensor.deviceProfileID}, Timeout: ${timeoutMinutes} minutes)`);
+      }
+    }
   } catch (error) {
-    console.log('Error logging:', error);
+    console.error('Error checking sensor timeouts:', error);
+    await logAppwrite(`Error checking sensor timeouts: ${error.message}`);
   }
 }
 
-
- async function triggerFireAlarmActions() {
+async function triggerFireAlarmActions() {
   console.log("Fetching Speaker devices from Appwrite...");
   let speakerDevices = [];
   try {
@@ -215,22 +286,19 @@ async function logAppwrite(log) {
       ]
     );
 
-    speakerDevices = sensors.documents.map(sensor => sensor.$id); // Assuming $id is devEUI
+    speakerDevices = sensors.documents.map(sensor => sensor.$id); 
     console.log("Speaker devices fetched successfully:", speakerDevices);
 
   } catch (error) {
     console.error("Failed to fetch Speaker devices from Appwrite:", error);
-    return; // Stop execution if devices cannot be fetched
+    return; 
   }
 
 
   console.log("Sending push notification to user and triggering downlinks...");
-  // await sendPushNotiWithUserData();
   try {
     const payload = process.env.CHIRPSTACK_DOWNLINK_SPEAKER_DATA;
-    // const devices = ['ffffff100004d057', 'ffffff100004d058', 'ffffff100004d059']; // Removed hardcoded devices
     await sendDownlinks(speakerDevices, payload); 
-    // await sendDownlinksSequentially(speakerDevices, payload);
   } catch (downlinkError) {
     console.error('Failed to send downlinks:', downlinkError);
   }
@@ -248,21 +316,6 @@ async function sendDownlinks(devices, payload) {
   } catch (error) {
     console.error('Failed to send downlinks to one or more devices:', error);
   }
-}
-
-async function sendDownlinksSequentially(devices, payload) { // Renamed function to indicate sequential execution
-  for (const devEUI of devices) {
-    try {
-      console.log(`Sending downlink to device: ${devEUI}`);
-      await sendDownlinkToChirpstack(devEUI, payload);
-      console.log(`Downlink sent successfully to device: ${devEUI}`); // Log success for each device
-    } catch (error) {
-      console.error(`Failed to send downlink to device: ${devEUI}`, error); // Log specific device failure
-      // Decide on error handling: continue to next device or stop?
-      // For now, continue to the next device and log errors.
-    }
-  }
-  console.log('Downlinks sending process completed sequentially for all devices.'); // Indicate completion of the sequential process
 }
 
 async function sendDownlinkToChirpstack(devEUI, data, fPort = 210, confirmed = true) {
@@ -300,7 +353,7 @@ async function sendDownlinkToChirpstack(devEUI, data, fPort = 210, confirmed = t
   }
 }
 
-async function sendPushNotificationToUser(deviceName) {
+async function sendPushNotificationToUser(message, name) {
   try {
     const users = await databases.listDocuments(
       buildingDatabaseID,
@@ -318,14 +371,13 @@ async function sendPushNotificationToUser(deviceName) {
     console.log('currentDate: ' + currentDate);
 
     console.log('Send Push Notification');
-    const body = 'Thiết bị ' + deviceName + ' đang ở mức độ cảnh báo cháy';
     const title = 'Cảnh báo cháy';
     await sendPushNotification({
       data: {
         title: title,
-        body: body,
+        body: message,
         "$id": "",
-        "name": String(deviceName),
+        "name": String(name),
         "time": "",
         "timeTurnOn": "",
         "battery":"",
@@ -337,122 +389,27 @@ async function sendPushNotificationToUser(deviceName) {
     });
 
     console.log('Successfully sent message');
-    // const uniqueID = uuidv4();
-
-    // await databases.createDocument(
-    //   buildingDatabaseID,
-    //   notificationCollectionID,
-    //   uniqueID,
-    //   {
-    //     sensorID: item.$id,
-    //     title: title,
-    //     description: body,
-    //     time: currentDate,
-    //     sensor: item.$id
-    //   }
-    // );
   } catch (e) {
-    // error('Errors:' + e);
+    console.error('Error sending push notification:', e);
+    throw e;
   }
 }
-
-async function sendPushNotiWithUserData() {
-  try {
-    const users = await databases.listDocuments(
-      buildingDatabaseID,
-      userCollectionID,
-      [Query.limit(100000), Query.offset(0)]
-    );
-
-    const deviceTokens = users.documents
-      .map((document) => document.deviceToken)
-      .filter((token) => token !== null && token.trim() !== '');
-
-    console.log('deviceTokens size: ' + deviceTokens.length);
-
-    const promise = await databases.listDocuments(
-      buildingDatabaseID,
-      sensorCollectionID,
-      [Query.limit(100000), Query.offset(0)]
-    );
-
-    const currentDate = new Date();
-    console.log('currentDate: ' + currentDate);
-
-    promise.documents.forEach(async (item) => {
-      const inputDate = new Date(item.lastNotification);
-      // const isValidTimeout = isMoreThan5MinutesAgo(item.lastNotification, currentDate);
-      const isValidTimeout = true;
-
-
-      console.log('-------------- ' + item.name + ' --------------')
-      console.log('lastNotification: ' + item.lastNotification);
-      console.log('inputDate: ' + inputDate);
-      console.log('isMoreThan5MinutesAgo: ' + isValidTimeout);
-
-      if (item.status == Status.FIRE && isValidTimeout) {
-        console.log('Send Push Notification');
-        const body = 'Thiết bị ' + item.name + ' đang ở mức độ cảnh báo cháy';
-        const title = 'Cảnh báo cháy';
-        await sendPushNotification({
-          data: {
-            title: title,
-            body: body,
-            "$id": String(item.$id),
-            "name": String(item.name),
-            "time": String(item.time),
-            "timeTurnOn": String(item.timeTurnOn),
-            "battery": String(item.battery),
-            "type": String(item.type),
-            "value": String(item.value),
-            "status": String(item.status),
-          },
-          tokens: deviceTokens,
-        });
-
-        console.log('Successfully sent message');
-        const uniqueID = uuidv4();
-
-        await databases.createDocument(
-          buildingDatabaseID,
-          notificationCollectionID,
-          uniqueID,
-          {
-            sensorID: item.$id,
-            title: title,
-            description: body,
-            time: currentDate,
-            sensor: item.$id
-          }
-        );
-
-        console.log('Successfully create notification document');
-
-      } else {
-        console.log('Do nothing');
-        return;
-      }
-    });
-  } catch (e) {
-    // error('Errors:' + e);
-  }
-}
-
 
 async function sendPushNotification(payload) {
   return await admin.messaging().sendEachForMulticast(payload);
 }
 
-function isMoreThan5MinutesAgo(dateString, currentDate) {
-  if (!dateString) {
-    return true;
+async function logAppwrite(log) {
+  try {
+    await databases.createDocument(buildingDatabaseID, logCollectionId, ID.unique(), {
+      log: log,
+      time: new Date().toISOString(),
+      type: "MQTT_AppWrite"
+    });
+  } catch (error) {
+    console.log('Error logging:', error);
   }
-
-  const inputDate = new Date(dateString);
-
-  const timeDifference = currentDate - inputDate;
-  const fiveMinutesInMilliseconds = 5 * 60 * 1000;
-
-  // So sánh sự chênh lệch với 5 phút
-  return timeDifference > fiveMinutesInMilliseconds;
 }
+
+// Export the functions needed by api.js
+export { sendPushNotificationToUser, triggerFireAlarmActions, logAppwrite };
