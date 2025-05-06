@@ -108,10 +108,27 @@ export const saveData = () => {
         } else {
           status = "on";
         }
+        
+        // Retrieve the sensor document to get the buildingId
+        let sensorData;
+        try {
+          sensorData = await databases.getDocument(
+            buildingDatabaseID,
+            sensorCollectionID,
+            temp.devEUI
+          );
+        } catch (error) {
+          console.log('Error retrieving sensor data:', error);
+          sensorData = null;
+        }
+        
         if (status == "fire") {
           console.log("Fire detected by smoke sensor, sending notifications and downlinks");
           const message = 'Thiết bị ' + temp.deviceName + ' đang ở mức độ cảnh báo cháy';
-          await sendPushNotificationToUser(message, temp.deviceName);
+          
+          // Get buildingId from sensor and send notification to users with that buildingId
+          const buildingId = sensorData?.buildingId || null;
+          await sendPushNotificationToUser(message, temp.deviceName, buildingId);
           await triggerFireAlarmActions();
         }
         console.log('Document updated successfully: ', temp.devEUI, status);
@@ -145,10 +162,27 @@ export const saveData = () => {
         } else {
           status = "on";
         }
+        
+        // Retrieve the sensor document to get the buildingId
+        let sensorData;
+        try {
+          sensorData = await databases.getDocument(
+            buildingDatabaseID,
+            sensorCollectionID,
+            temp.devEUI
+          );
+        } catch (error) {
+          console.log('Error retrieving sensor data:', error);
+          sensorData = null;
+        }
+        
         if (status == "fire") {
           console.log("Fire detected by smoke sensor, sending notifications and downlinks");
           const message = 'Thiết bị ' + temp.deviceName + ' đang ở mức độ cảnh báo cháy';
-          await sendPushNotificationToUser(message, temp.deviceName);
+          
+          // Get buildingId from sensor and send notification to users with that buildingId
+          const buildingId = sensorData?.buildingId || null;
+          await sendPushNotificationToUser(message, temp.deviceName, buildingId);
           await triggerFireAlarmActions();
 
           var caseTampered = temp.object.data.anti_tamper_status
@@ -353,12 +387,19 @@ async function sendDownlinkToChirpstack(devEUI, data, fPort = 210, confirmed = t
   }
 }
 
-async function sendPushNotificationToUser(message, name) {
+async function sendPushNotificationToUser(message, name, buildingId = null) {
   try {
+    let query = [Query.limit(100000), Query.offset(0)];
+    
+    // If buildingId is provided, filter users by buildingId
+    if (buildingId) {
+      query.push(Query.equal('buildingId', buildingId));
+    }
+    
     const users = await databases.listDocuments(
       buildingDatabaseID,
       userCollectionID,
-      [Query.limit(100000), Query.offset(0)]
+      query
     );
 
     const deviceTokens = users.documents
