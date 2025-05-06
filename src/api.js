@@ -16,21 +16,21 @@ const databases = new Databases(client);
 // Fire alarm trigger endpoint
 router.post('/trigger-fire-alarm', async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, buildingId } = req.body;
     
-    if (!name) {
-      return res.status(400).json({ error: 'Name is required in request body' });
+    if (!name || !buildingId) {
+      return res.status(400).json({ error: 'Name and buildingId are required in request body' });
     }
 
-    // 1. Send push notification with custom message
+    // 1. Send push notification with custom message to users with matching buildingId
     const customMessage = `Người dùng ${name} đang cảnh báo cháy trong toà nhà`;
-    await sendPushNotificationToUser(customMessage, name);
+    await sendPushNotificationToUser(customMessage, name, buildingId);
 
     // 2. Trigger fire alarm actions
     await triggerFireAlarmActions();
 
     // Log the manual trigger
-    await logAppwrite(`Manual fire alarm trigger by user: ${name}`);
+    await logAppwrite(`Manual fire alarm trigger by user: ${name} in building: ${buildingId}`);
 
     res.status(200).json({ message: 'Fire alarm triggered successfully' });
   } catch (error) {
