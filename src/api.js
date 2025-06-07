@@ -27,7 +27,7 @@ router.post('/trigger-fire-alarm', async (req, res) => {
     await sendPushNotificationToUser(customMessage, name, buildingId);
 
     // 2. Trigger fire alarm actions
-    await triggerFireAlarmActions();
+    await triggerFireAlarmActions(buildingId);
 
     // Log the manual trigger
     await logAppwrite(`Manual fire alarm trigger by user: ${name} in building: ${buildingId}`);

@@ -212,7 +212,7 @@ export const saveData = () => {
       if (temp.deviceProfileID == speakerProfileID) {
         var status = Status.ON; 
         await databases.updateDocument(
-          buildingDatabaseID,
+          buildingDatabaseID, 
           sensorCollectionID,
           temp.devEUI,
           {
@@ -306,18 +306,25 @@ async function checkSensorTimeouts() {
   }
 }
 
-async function triggerFireAlarmActions() {
+async function triggerFireAlarmActions(buildingId) {
   console.log("Fetching Speaker devices from Appwrite...");
   let speakerDevices = [];
   try {
+    let queries = [
+      Query.equal('type', 'Speaker'),
+      Query.limit(100000),
+      Query.offset(0)
+    ];
+
+    // Add buildingId filter if provided
+    if (buildingId) {
+      queries.push(Query.equal('buildingId', buildingId));
+    }
+
     const sensors = await databases.listDocuments(
       buildingDatabaseID,
       sensorCollectionID,
-      [
-        Query.equal('type', 'Speaker'),
-        Query.limit(100000),
-        Query.offset(0)
-      ]
+      queries
     );
 
     speakerDevices = sensors.documents.map(sensor => sensor.$id); 
@@ -327,7 +334,6 @@ async function triggerFireAlarmActions() {
     console.error("Failed to fetch Speaker devices from Appwrite:", error);
     return; 
   }
-
 
   console.log("Sending push notification to user and triggering downlinks...");
   try {
