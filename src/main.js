@@ -129,7 +129,7 @@ export const saveData = () => {
           // Get buildingId from sensor and send notification to users with that buildingId
           const buildingId = sensorData?.buildingId || null;
           await sendPushNotificationToUser(message, temp.deviceName, buildingId);
-          await triggerFireAlarmActions();
+          await triggerFireAlarmActions(buildingId);
         }
         console.log('Document updated successfully: ', temp.devEUI, status);
 
@@ -183,7 +183,7 @@ export const saveData = () => {
           // Get buildingId from sensor and send notification to users with that buildingId
           const buildingId = sensorData?.buildingId || null;
           await sendPushNotificationToUser(message, temp.deviceName, buildingId);
-          await triggerFireAlarmActions();
+          await triggerFireAlarmActions(buildingId);
 
           var caseTampered = temp.object.data.anti_tamper_status
           if (caseTampered == "Not tampered") {
@@ -306,18 +306,25 @@ async function checkSensorTimeouts() {
   }
 }
 
-async function triggerFireAlarmActions() {
+async function triggerFireAlarmActions(buildingId) {
   console.log("Fetching Speaker devices from Appwrite...");
   let speakerDevices = [];
   try {
+    let queries = [
+      Query.equal('type', 'Speaker'),
+      Query.limit(100000),
+      Query.offset(0)
+    ];
+
+    // Add buildingId filter if provided
+    if (buildingId) {
+      queries.push(Query.equal('buildingId', buildingId));
+    }
+
     const sensors = await databases.listDocuments(
       buildingDatabaseID,
       sensorCollectionID,
-      [
-        Query.equal('type', 'Speaker'),
-        Query.limit(100000),
-        Query.offset(0)
-      ]
+      queries
     );
 
     speakerDevices = sensors.documents.map(sensor => sensor.$id); 
@@ -327,7 +334,6 @@ async function triggerFireAlarmActions() {
     console.error("Failed to fetch Speaker devices from Appwrite:", error);
     return; 
   }
-
 
   console.log("Sending push notification to user and triggering downlinks...");
   try {
