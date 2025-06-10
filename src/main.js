@@ -129,7 +129,7 @@ export const saveData = () => {
           // Get buildingId from sensor and send notification to users with that buildingId
           const buildingId = sensorData?.buildingId || null;
           await sendPushNotificationToUser(message, temp.deviceName, buildingId);
-          await triggerFireAlarmActions();
+          await triggerFireAlarmActions(buildingId);
         }
         console.log('Document updated successfully: ', temp.devEUI, status);
 
@@ -183,7 +183,7 @@ export const saveData = () => {
           // Get buildingId from sensor and send notification to users with that buildingId
           const buildingId = sensorData?.buildingId || null;
           await sendPushNotificationToUser(message, temp.deviceName, buildingId);
-          await triggerFireAlarmActions();
+          await triggerFireAlarmActions(buildingId);
 
           var caseTampered = temp.object.data.anti_tamper_status
           if (caseTampered == "Not tampered") {
@@ -212,7 +212,7 @@ export const saveData = () => {
       if (temp.deviceProfileID == speakerProfileID) {
         var status = Status.ON; 
         await databases.updateDocument(
-          buildingDatabaseID, 
+          buildingDatabaseID,
           sensorCollectionID,
           temp.devEUI,
           {
