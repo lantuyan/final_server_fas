@@ -243,10 +243,11 @@ export const saveData = () => {
               // Example: look for the multicast address in the decodedData
               // This is a simple check, you may need to adjust parsing based on your protocol
               const decodedStr = decodedData.toString('ascii');
+              const decodedStrUpper = decodedStr.toUpperCase();
               if (
-                decodedStr.includes(multicastAddr) &&
-                decodedStr.includes(nwkSKey.substring(0, 8)) && // partial match for demonstration
-                decodedStr.includes(appSKey.substring(0, 8))
+                decodedStrUpper.includes(multicastAddr.toUpperCase()) &&
+                decodedStrUpper.includes(nwkSKey.toUpperCase()) &&
+                decodedStrUpper.includes(appSKey.toUpperCase())
               ) {
                 isValid = true;
               }
