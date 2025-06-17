@@ -100,10 +100,10 @@ export const saveData = () => {
 
       if (deviceProfileID === smokeProfileID) {
         var status;
-        let smoke = temp.object?.data?.smoke_alarm;
-        let heat = temp.object?.data?.heat_alarm;
-        let battery = temp.object?.data?.batteryStatus === "Normal" ? 100 : 0;
-        let temperature = temp.object?.data?.temperature;
+        let smoke = temp.object?.smoke_alarm;
+        let heat = temp.object?.heat_alarm;
+        let battery = temp.object?.batteryStatus === "Normal" ? 100 : 0;
+        let temperature = temp.object?.temperature;
         
         if (smoke === "Danger" || heat === "Danger") {
           status = "fire";
@@ -140,7 +140,7 @@ export const saveData = () => {
         await databases.updateDocument(
           buildingDatabaseID,
           sensorCollectionID,
-          temp.deviceInfo.devEUI,
+          temp.deviceInfo.devEui,
           {
             name: temp.deviceInfo.deviceName,
             time: currentDate,
@@ -157,7 +157,7 @@ export const saveData = () => {
       }
       if (deviceProfileID === buttonProfileID) {
         var status;
-        let event = temp.object?.data?.sos_event;
+        let event = temp.object?.sos_event;
         if (event === "Danger") {
           status = "fire";
         } else if (event === "Safe") {
