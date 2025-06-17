@@ -105,7 +105,8 @@ export const saveData = () => {
         let battery = temp.object?.batteryStatus === "Normal" ? 100 : 0;
         let temperature = temp.object?.temperature;
         
-        if (smoke === "Danger" || heat === "Danger") {
+        // Treat 'Triggered' as fire, 'Normal' as on
+        if (smoke === "Triggered" || heat === "Triggered") {
           status = "fire";
         } else if (smoke === "Normal" || heat === "Normal") {
           status = "on";
