@@ -231,7 +231,7 @@ export const saveData = () => {
           } catch (error) {
             console.error('Error updating device document:', error);
           }
-        } else {
+        } else if (temp.deviceInfo.tags.isActiveMulticast === "false") {
           try {
             // Query sensor data from Appwrite using devEui
             const sensorData = await databases.getDocument(
