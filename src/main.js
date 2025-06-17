@@ -218,6 +218,48 @@ export const saveData = () => {
         // Check if fPort is 220 and data exists
         if (temp.fPort === 220 && temp.data) {
           try {
+            // Retrieve the sensor document to get activeMulticastKey
+            const sensorData = await databases.getDocument(
+              buildingDatabaseID,
+              sensorCollectionID,
+              temp.deviceInfo.devEui
+            );
+            let isValid = false;
+            if (sensorData.activeMulticastKey) {
+              // Decode the received base64 data
+              const decodedData = Buffer.from(temp.data, 'base64');
+              // Decode the activeMulticastKey from base64
+              const multicastKeyBuffer = Buffer.from(sensorData.activeMulticastKey, 'base64');
+              // Extract multicast address and keys from the decoded multicastKeyBuffer
+              // Example: multicast address = bytes 3-6 (little endian), nwkSKey = bytes 7-22, appSKey = bytes 23-38
+              // Adjust the offsets as per your actual key structure
+              const multicastAddr = multicastKeyBuffer.subarray(3, 7).reverse().toString('hex');
+              const nwkSKey = multicastKeyBuffer.subarray(7, 23).toString('hex');
+              const appSKey = multicastKeyBuffer.subarray(23, 39).toString('hex');
+              // Now, parse the decodedData to extract the same fields for comparison
+              // Example: look for the multicast address in the decodedData
+              // This is a simple check, you may need to adjust parsing based on your protocol
+              const decodedStr = decodedData.toString('ascii');
+              if (
+                decodedStr.includes(multicastAddr) &&
+                decodedStr.includes(nwkSKey.substring(0, 8)) && // partial match for demonstration
+                decodedStr.includes(appSKey.substring(0, 8))
+              ) {
+                isValid = true;
+              }
+              if (!isValid) {
+                console.error('Multicast check failed: Data does not match expected address or keys', {
+                  devEui: temp.deviceInfo.devEui,
+                  multicastAddr,
+                  nwkSKey,
+                  appSKey,
+                  decodedStr
+                });
+                // Optionally, take further action here (e.g., alert, update DB, etc.)
+              } else {
+                console.log('Multicast check passed for device', temp.deviceInfo.devEui);
+              }
+            }
             // Update Appwrite document to set activeMulticastKey to null
             await databases.updateDocument(
               buildingDatabaseID,
@@ -229,7 +271,7 @@ export const saveData = () => {
             );
             console.log(`Set activeMulticastKey to null for device ${temp.deviceInfo.devEui}`);
           } catch (error) {
-            console.error('Error updating device document:', error);
+            console.error('Error updating device document or checking multicast:', error);
           }
         } else if (temp.deviceInfo.tags.isActiveMulticast === "false") {
           try {
