@@ -361,40 +361,37 @@ async function checkSensorTimeouts() {
 }
 
 async function triggerFireAlarmActions(buildingId) {
-  console.log("Fetching Speaker devices from Appwrite...");
-  let speakerDevices = [];
+  console.log("Sending multicast message for fire alarm...");
   try {
-    let queries = [
-      Query.equal('type', 'Speaker'),
-      Query.limit(100000),
-      Query.offset(0)
-    ];
+    const url = `${chirpstackAPIURL}/multicast-groups/${buildingId}/queue`;
+    const headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Grpc-Metadata-Authorization': `Bearer ${chirpstackToken}`,
+    };
 
-    // Add buildingId filter if provided
-    if (buildingId) {
-      queries.push(Query.equal('buildingId', buildingId));
+    const body = {
+      queueItem: {
+        confirmed: true,
+        fPort: 210,
+        data: chirpstackDownlinkSpeakerData
+      }
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
     }
 
-    const sensors = await databases.listDocuments(
-      buildingDatabaseID,
-      sensorCollectionID,
-      queries
-    );
-
-    speakerDevices = sensors.documents.map(sensor => sensor.$id); 
-    console.log("Speaker devices fetched successfully:", speakerDevices);
-
+    console.log('Multicast message sent successfully');
   } catch (error) {
-    console.error("Failed to fetch Speaker devices from Appwrite:", error);
-    return; 
-  }
-
-  console.log("Sending push notification to user and triggering downlinks...");
-  try {
-    const payload = process.env.CHIRPSTACK_DOWNLINK_SPEAKER_DATA;
-    await sendDownlinks(speakerDevices, payload); 
-  } catch (downlinkError) {
-    console.error('Failed to send downlinks:', downlinkError);
+    console.error('Error sending multicast message:', error);
+    throw error;
   }
 }
 
