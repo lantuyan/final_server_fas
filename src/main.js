@@ -230,12 +230,10 @@ export const saveData = () => {
               const decodedData = Buffer.from(temp.data, 'base64');
               // Decode the activeMulticastKey from base64
               const multicastKeyBuffer = Buffer.from(sensorData.activeMulticastKey, 'base64');
-              // Extract multicast address and keys from the decoded multicastKeyBuffer
-              // Example: multicast address = bytes 3-6 (little endian), nwkSKey = bytes 7-22, appSKey = bytes 23-38
-              // Adjust the offsets as per your actual key structure
-              const multicastAddr = multicastKeyBuffer.subarray(3, 7).reverse().toString('hex');
-              const nwkSKey = multicastKeyBuffer.subarray(7, 23).toString('hex');
-              const appSKey = multicastKeyBuffer.subarray(23, 39).toString('hex');
+              // Correct extraction based on protocol
+              const multicastAddr = multicastKeyBuffer.subarray(2, 6).reverse().toString('hex');
+              const nwkSKey = multicastKeyBuffer.subarray(6, 22).toString('hex');
+              const appSKey = multicastKeyBuffer.subarray(22, 38).toString('hex');
               // Now, parse the decodedData to extract the same fields for comparison
               // Example: look for the multicast address in the decodedData
               // This is a simple check, you may need to adjust parsing based on your protocol
