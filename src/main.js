@@ -95,15 +95,19 @@ export const saveData = () => {
       const temp = JSON.parse(message);
       console.log('Received message:', temp);
 
-      if (temp.deviceProfileID == smokeProfileID) {
+      // Extract device profile ID from deviceInfo
+      const deviceProfileID = temp.deviceInfo?.deviceProfileId;
+
+      if (deviceProfileID === smokeProfileID) {
         var status;
-        let smoke = temp.object.data.smoke_alarm
-        let heat = temp.object.data.heat_alarm
-        let battery = temp.object.data.batteryStatus == "Normal" ? 100 : 0
-        let temperature = temp.object.data.temperature 
-        if (smoke == "Danger" || heat == "Danger") {
+        let smoke = temp.object?.data?.smoke_alarm;
+        let heat = temp.object?.data?.heat_alarm;
+        let battery = temp.object?.data?.batteryStatus === "Normal" ? 100 : 0;
+        let temperature = temp.object?.data?.temperature;
+        
+        if (smoke === "Danger" || heat === "Danger") {
           status = "fire";
-        } else if (smoke == "Normal" || heat == "Normal") {
+        } else if (smoke === "Normal" || heat === "Normal") {
           status = "on";
         } else {
           status = "on";
@@ -115,34 +119,33 @@ export const saveData = () => {
           sensorData = await databases.getDocument(
             buildingDatabaseID,
             sensorCollectionID,
-            temp.devEUI
+            temp.deviceInfo.devEui
           );
         } catch (error) {
           console.log('Error retrieving sensor data:', error);
           sensorData = null;
         }
         
-        if (status == "fire") {
+        if (status === "fire") {
           console.log("Fire detected by smoke sensor, sending notifications and downlinks");
-          const message = 'Thiết bị ' + temp.deviceName + ' đang ở mức độ cảnh báo cháy';
+          const message = 'Thiết bị ' + temp.deviceInfo.deviceName + ' đang ở mức độ cảnh báo cháy';
           
           // Get buildingId from sensor and send notification to users with that buildingId
           const buildingId = sensorData?.buildingId || null;
-          await sendPushNotificationToUser(message, temp.deviceName, buildingId);
+          await sendPushNotificationToUser(message, temp.deviceInfo.deviceName, buildingId);
           await triggerFireAlarmActions(buildingId);
         }
-        console.log('Document updated successfully: ', temp.devEUI, status);
+        console.log('Document updated successfully: ', temp.deviceInfo.devEui, status);
 
         await databases.updateDocument(
           buildingDatabaseID,
           sensorCollectionID,
-          temp.devEUI,
+          temp.deviceInfo.devEUI,
           {
-            name: temp.deviceName,
+            name: temp.deviceInfo.deviceName,
             time: currentDate,
             timeTurnOn: "",
             battery: battery,
-            // type: temp.deviceProfileName,
             value: temperature,
             humidity: 0,
             smoke: 0,
@@ -152,12 +155,12 @@ export const saveData = () => {
           }
         );
       }
-      if (temp.deviceProfileID == buttonProfileID) {
+      if (deviceProfileID === buttonProfileID) {
         var status;
-        let event = temp.object.data.sos_event
-        if (event == "Danger") {
+        let event = temp.object?.data?.sos_event;
+        if (event === "Danger") {
           status = "fire";
-        } else if (event == "Safe") {
+        } else if (event === "Safe") {
           status = "on";
         } else {
           status = "on";
@@ -169,34 +172,34 @@ export const saveData = () => {
           sensorData = await databases.getDocument(
             buildingDatabaseID,
             sensorCollectionID,
-            temp.devEUI
+            temp.deviceInfo.devEui
           );
         } catch (error) {
           console.log('Error retrieving sensor data:', error);
           sensorData = null;
         }
         
-        if (status == "fire") {
-          console.log("Fire detected by smoke sensor, sending notifications and downlinks");
-          const message = 'Thiết bị ' + temp.deviceName + ' đang ở mức độ cảnh báo cháy';
+        if (status === "fire") {
+          console.log("Fire detected by button sensor, sending notifications and downlinks");
+          const message = 'Thiết bị ' + temp.deviceInfo.deviceName + ' đang ở mức độ cảnh báo cháy';
           
           // Get buildingId from sensor and send notification to users with that buildingId
           const buildingId = sensorData?.buildingId || null;
-          await sendPushNotificationToUser(message, temp.deviceName, buildingId);
+          await sendPushNotificationToUser(message, temp.deviceInfo.deviceName, buildingId);
           await triggerFireAlarmActions(buildingId);
 
-          var caseTampered = temp.object.data.anti_tamper_status
-          if (caseTampered == "Not tampered") {
-          } else if (caseTampered == "Tampered") {
+          var caseTampered = temp.object?.data?.anti_tamper_status;
+          if (caseTampered === "Not tampered") {
+          } else if (caseTampered === "Tampered") {
           }
         }
 
         await databases.updateDocument(
           buildingDatabaseID,
           sensorCollectionID,
-          temp.devEUI,
+          temp.deviceInfo.devEui,
           {
-            name: temp.deviceName,
+            name: temp.deviceInfo.deviceName,
             time: currentDate,
             timeTurnOn: "",
             battery: 0,
@@ -207,19 +210,19 @@ export const saveData = () => {
             status: status
           }
         );
-        console.log('Document updated successfully: ', temp.devEUI, status);
+        console.log('Document updated successfully: ', temp.deviceInfo.devEui, status);
       }
-      if (temp.deviceProfileID == speakerProfileID) {
+      if (deviceProfileID === speakerProfileID) {
         var status = Status.ON;
         
         // Check if fPort is 220 and data exists
         if (temp.fPort === 220 && temp.data) {
           try {
             // Update Chirpstack device tags to set isActiveMulticast to true
-            await updateChirpstackDeviceTags(temp.devEUI, {
+            await updateChirpstackDeviceTags(temp.deviceInfo.devEui, {
               isActiveMulticast: "true"
             });
-            console.log(`Updated isActiveMulticast to true for device ${temp.devEUI}`);
+            console.log(`Updated isActiveMulticast to true for device ${temp.deviceInfo.devEui}`);
           } catch (error) {
             console.error('Error updating device tags:', error);
           }
@@ -232,18 +235,18 @@ export const saveData = () => {
             const sensorData = await databases.getDocument(
               buildingDatabaseID,
               sensorCollectionID,
-              temp.devEUI
+              temp.deviceInfo.devEui
             );
 
             // If sensor has activeMulticastKey, send it to the queue
             if (sensorData.activeMulticastKey) {
               await sendDownlinkToChirpstack(
-                temp.devEUI,
+                temp.deviceInfo.devEui,
                 sensorData.activeMulticastKey,
                 219,  // fPort 219 as specified
                 true  // confirmed true as specified
               );
-              console.log(`Sent activeMulticastKey to device ${temp.devEUI}`);
+              console.log(`Sent activeMulticastKey to device ${temp.deviceInfo.devEui}`);
             }
           } catch (error) {
             console.error('Error handling speaker multicast:', error);
@@ -253,9 +256,9 @@ export const saveData = () => {
         await databases.updateDocument(
           buildingDatabaseID,
           sensorCollectionID,
-          temp.devEUI,
+          temp.deviceInfo.devEui,
           {
-            name: temp.deviceName,
+            name: temp.deviceInfo.deviceName,
             time: currentDate,
             timeTurnOn: "",
             battery: 0,  
@@ -266,7 +269,7 @@ export const saveData = () => {
             status: status,
           }
         );
-        console.log('Speaker Document updated successfully: ', temp.devEUI, status);
+        console.log('Speaker Document updated successfully: ', temp.deviceInfo.devEui, status);
       }
     } catch (error) {
       console.log('Error processing message:', error);
