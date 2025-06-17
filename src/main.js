@@ -250,6 +250,7 @@ export const saveData = () => {
               if (!isValid) {
                 console.error('Multicast check failed: Data does not match expected address or keys', {
                   devEui: temp.deviceInfo.devEui,
+                  multicastKeyBuffer,
                   multicastAddr,
                   nwkSKey,
                   appSKey,
