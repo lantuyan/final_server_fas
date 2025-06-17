@@ -261,19 +261,19 @@ export const saveData = () => {
                 });
                 // Optionally, take further action here (e.g., alert, update DB, etc.)
               } else {
+                  // Update Appwrite document to set activeMulticastKey to null
+                  await databases.updateDocument(
+                    buildingDatabaseID,
+                    sensorCollectionID,
+                    temp.deviceInfo.devEui,
+                    {
+                      activeMulticastKey: null
+                    }
+                  );
+                console.log(`Set activeMulticastKey to null for device ${temp.deviceInfo.devEui}`);
                 console.log('Multicast check passed for device', temp.deviceInfo.devEui);
               }
             }
-            // Update Appwrite document to set activeMulticastKey to null
-            await databases.updateDocument(
-              buildingDatabaseID,
-              sensorCollectionID,
-              temp.deviceInfo.devEui,
-              {
-                activeMulticastKey: null
-              }
-            );
-            console.log(`Set activeMulticastKey to null for device ${temp.deviceInfo.devEui}`);
           } catch (error) {
             console.error('Error updating device document or checking multicast:', error);
           }
