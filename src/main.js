@@ -226,39 +226,39 @@ export const saveData = () => {
           } catch (error) {
             console.error('Error updating device tags:', error);
           }
-        }
-        
-        // Check if isActiveMulticast is false
-        if (temp.deviceInfo.tags.isActiveMulticast === "false") {
-          try {
-            // Query sensor data from Appwrite using devEui
-            const sensorData = await databases.getDocument(
-              buildingDatabaseID,
-              sensorCollectionID,
-              temp.deviceInfo.devEui
-            );
-
-            // If sensor has activeMulticastKey, send it to the queue
-            if (sensorData.activeMulticastKey) {
-              await sendDownlinkToChirpstack(
-                temp.deviceInfo.devEui,
-                sensorData.activeMulticastKey,
-                219,  // fPort 219 as specified
-                false  // confirmed true as specified
+        } else {
+          // Check if isActiveMulticast is false
+          if (temp.deviceInfo.tags.isActiveMulticast === "false") {
+            try {
+              // Query sensor data from Appwrite using devEui
+              const sensorData = await databases.getDocument(
+                buildingDatabaseID,
+                sensorCollectionID,
+                temp.deviceInfo.devEui
               );
-              console.log(`Sent activeMulticastKey to device ${temp.deviceInfo.devEui}`);
 
-              // Send multicast check downlink after sending activeMulticastKey
-              await sendDownlinkToChirpstack(
-                temp.deviceInfo.devEui,
-                "/0FUK01VTFRJQ0FTVDE9Pw==", // Check Multicast for port 220
-                220,  // fPort 220 as specified
-                true  // confirmed true as specified
-              );
-              console.log(`Sent multicast check downlink to device ${temp.deviceInfo.devEui}`);
+              // If sensor has activeMulticastKey, send it to the queue
+              if (sensorData.activeMulticastKey) {
+                await sendDownlinkToChirpstack(
+                  temp.deviceInfo.devEui,
+                  sensorData.activeMulticastKey,
+                  219,  // fPort 219 as specified
+                  false  // confirmed true as specified
+                );
+                console.log(`Sent activeMulticastKey to device ${temp.deviceInfo.devEui}`);
+
+                // Send multicast check downlink after sending activeMulticastKey
+                await sendDownlinkToChirpstack(
+                  temp.deviceInfo.devEui,
+                  "/0FUK01VTFRJQ0FTVDE9Pw==", // Check Multicast for port 220
+                  220,  // fPort 220 as specified
+                  true  // confirmed true as specified
+                );
+                console.log(`Sent multicast check downlink to device ${temp.deviceInfo.devEui}`);
+              }
+            } catch (error) {
+              console.error('Error handling speaker multicast:', error);
             }
-          } catch (error) {
-            console.error('Error handling speaker multicast:', error);
           }
         }
 
