@@ -218,47 +218,50 @@ export const saveData = () => {
         // Check if fPort is 220 and data exists
         if (temp.fPort === 220 && temp.data) {
           try {
-            // Update Chirpstack device tags to set isActiveMulticast to true
-            await updateChirpstackDeviceTags(temp.deviceInfo.devEui, {
-              isActiveMulticast: "true"
-            });
-            console.log(`Updated isActiveMulticast to true for device ${temp.deviceInfo.devEui}`);
+            // Update Appwrite document to set activeMulticastKey to null
+            await databases.updateDocument(
+              buildingDatabaseID,
+              sensorCollectionID,
+              temp.deviceInfo.devEui,
+              {
+                activeMulticastKey: null
+              }
+            );
+            console.log(`Set activeMulticastKey to null for device ${temp.deviceInfo.devEui}`);
           } catch (error) {
-            console.error('Error updating device tags:', error);
+            console.error('Error updating device document:', error);
           }
         } else {
-          // Check if isActiveMulticast is false
-          if (temp.deviceInfo.tags.isActiveMulticast === "false") {
-            try {
-              // Query sensor data from Appwrite using devEui
-              const sensorData = await databases.getDocument(
-                buildingDatabaseID,
-                sensorCollectionID,
-                temp.deviceInfo.devEui
+          try {
+            // Query sensor data from Appwrite using devEui
+            const sensorData = await databases.getDocument(
+              buildingDatabaseID,
+              sensorCollectionID,
+              temp.deviceInfo.devEui
+            );
+
+            // If sensor has activeMulticastKey, send it to the queue
+            if (sensorData.activeMulticastKey) {
+              // Step1: Send activeMulticastKey to the queue
+              await sendDownlinkToChirpstack(
+                temp.deviceInfo.devEui,
+                sensorData.activeMulticastKey,
+                219,  // fPort 219 as specified
+                false  // confirmed false as specified
               );
+              console.log(`Sent activeMulticastKey to device ${temp.deviceInfo.devEui}`);
 
-              // If sensor has activeMulticastKey, send it to the queue
-              if (sensorData.activeMulticastKey) {
-                await sendDownlinkToChirpstack(
-                  temp.deviceInfo.devEui,
-                  sensorData.activeMulticastKey,
-                  219,  // fPort 219 as specified
-                  false  // confirmed true as specified
-                );
-                console.log(`Sent activeMulticastKey to device ${temp.deviceInfo.devEui}`);
-
-                // Send multicast check downlink after sending activeMulticastKey
-                await sendDownlinkToChirpstack(
-                  temp.deviceInfo.devEui,
-                  "/0FUK01VTFRJQ0FTVDE9Pw==", // Check Multicast for port 220
-                  220,  // fPort 220 as specified
-                  true  // confirmed true as specified
-                );
-                console.log(`Sent multicast check downlink to device ${temp.deviceInfo.devEui}`);
-              }
-            } catch (error) {
-              console.error('Error handling speaker multicast:', error);
+              // Step2: Send multicast check downlink after sending activeMulticastKey
+              await sendDownlinkToChirpstack(
+                temp.deviceInfo.devEui,
+                "/0FUK01VTFRJQ0FTVDE9Pw==", // Check Multicast for port 220
+                220,  // fPort 220 as specified
+                true  // confirmed true as specified
+              );
+              console.log(`Sent multicast check downlink to device ${temp.deviceInfo.devEui}`);
             }
+          } catch (error) {
+            console.error('Error handling speaker multicast:', error);
           }
         }
 
@@ -505,61 +508,6 @@ async function logAppwrite(log) {
     });
   } catch (error) {
     console.log('Error logging:', error);
-  }
-}
-
-async function updateChirpstackDeviceTags(devEUI, tags) {
-  const url = `${chirpstackAPIURL}/api/devices/${devEUI}`;
-  const headers = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'Grpc-Metadata-Authorization': `Bearer ${chirpstackToken}`,
-  };
-
-  try {
-    // First get the current device data
-    const getResponse = await fetch(url, {
-      method: 'GET',
-      headers,
-    });
-
-    if (!getResponse.ok) {
-      throw new Error(`HTTP error! Status: ${getResponse.status}`);
-    }
-
-    const deviceData = await getResponse.json();
-    
-    // Prepare the request body according to the API specification
-    const requestBody = {
-      device: {
-        devEui: deviceData.device.devEui,
-        name: deviceData.device.name,
-        description: deviceData.device.description,
-        applicationId: deviceData.device.applicationId,
-        deviceProfileId: deviceData.device.deviceProfileId,
-        skipFcntCheck: deviceData.device.skipFcntCheck,
-        isDisabled: deviceData.device.isDisabled,
-        variables: deviceData.device.variables || {},
-        tags: tags,
-        joinEui: deviceData.device.joinEui
-      }
-    };
-
-    // Send the update
-    const updateResponse = await fetch(url, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!updateResponse.ok) {
-      throw new Error(`HTTP error! Status: ${updateResponse.status}`);
-    }
-
-    console.log(`Successfully updated tags for device ${devEUI}`);
-  } catch (error) {
-    console.error('Error updating device tags:', error);
-    throw error;
   }
 }
 
