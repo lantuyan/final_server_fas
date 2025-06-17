@@ -233,8 +233,8 @@ export const saveData = () => {
               const multicastKeyBuffer = Buffer.from(sensorData.activeMulticastKey, 'base64');
               // Extraction based on user protocol and expected values
               const multicastAddr = Buffer.from([
-                multicastKeyBuffer[3],
                 multicastKeyBuffer[4],
+                multicastKeyBuffer[3],
                 multicastKeyBuffer[2],
                 multicastKeyBuffer[1]
               ]).toString('hex');
