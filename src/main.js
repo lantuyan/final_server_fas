@@ -262,6 +262,7 @@ export const saveData = () => {
                   decodedStr
                 });
                 // Optionally, take further action here (e.g., alert, update DB, etc.)
+                await handleSpeakerMulticast(temp.deviceInfo.devEui);
               } else {
                   // Update Appwrite document to set activeMulticastKey to null
                   await databases.updateDocument(
@@ -280,37 +281,7 @@ export const saveData = () => {
             console.error('Error updating device document or checking multicast:', error);
           }
         } else if (temp.deviceInfo.tags.isActiveMulticast === "false") {
-          try {
-            // Query sensor data from Appwrite using devEui
-            const sensorData = await databases.getDocument(
-              buildingDatabaseID,
-              sensorCollectionID,
-              temp.deviceInfo.devEui
-            );
-
-            // If sensor has activeMulticastKey, send it to the queue
-            if (sensorData.activeMulticastKey) {
-              // Step1: Send activeMulticastKey to the queue
-              await sendDownlinkToChirpstack(
-                temp.deviceInfo.devEui,
-                sensorData.activeMulticastKey,
-                219,  // fPort 219 as specified
-                false  // confirmed false as specified
-              );
-              console.log(`Sent activeMulticastKey to device ${temp.deviceInfo.devEui}`);
-
-              // Step2: Send multicast check downlink after sending activeMulticastKey
-              await sendDownlinkToChirpstack(
-                temp.deviceInfo.devEui,
-                "/0FUK01VTFRJQ0FTVDE9Pw==", // Check Multicast for port 220
-                220,  // fPort 220 as specified
-                true  // confirmed true as specified
-              );
-              console.log(`Sent multicast check downlink to device ${temp.deviceInfo.devEui}`);
-            }
-          } catch (error) {
-            console.error('Error handling speaker multicast:', error);
-          }
+          await handleSpeakerMulticast(temp.deviceInfo.devEui);
         }
 
         await databases.updateDocument(
@@ -491,6 +462,40 @@ async function sendDownlinkToChirpstack(devEUI, data, fPort = 210, confirmed = t
   }
 }
 
+async function handleSpeakerMulticast(devEui) {
+  try {
+    // Query sensor data from Appwrite using devEui
+    const sensorData = await databases.getDocument(
+      buildingDatabaseID,
+      sensorCollectionID,
+      devEui
+    );
+
+    // If sensor has activeMulticastKey, send it to the queue
+    if (sensorData.activeMulticastKey) {
+      // Step1: Send activeMulticastKey to the queue
+      await sendDownlinkToChirpstack(
+        devEui,
+        sensorData.activeMulticastKey,
+        219,  // fPort 219 as specified
+        false  // confirmed false as specified
+      );
+      console.log(`Sent activeMulticastKey to device ${devEui}`);
+
+      // Step2: Send multicast check downlink after sending activeMulticastKey
+      await sendDownlinkToChirpstack(
+        devEui,
+        "/0FUK01VTFRJQ0FTVDE9Pw==", // Check Multicast for port 220
+        220,  // fPort 220 as specified
+        true  // confirmed true as specified
+      );
+      console.log(`Sent multicast check downlink to device ${devEui}`);
+    }
+  } catch (error) {
+    console.error('Error handling speaker multicast:', error);
+  }
+}
+
 async function sendPushNotificationToUser(message, name, buildingId = null) {
   try {
     let query = [Query.limit(100000), Query.offset(0)];
@@ -511,6 +516,11 @@ async function sendPushNotificationToUser(message, name, buildingId = null) {
       .filter((token) => token !== null && token.trim() !== '');
 
     console.log('deviceTokens size: ' + deviceTokens.length);
+
+    if (deviceTokens.length === 0) {
+      console.log('No device tokens found, skipping push notification.');
+      return;
+    }
 
     const currentDate = new Date();
     console.log('currentDate: ' + currentDate);
