@@ -18,6 +18,7 @@ throwIfMissing(process.env, [
   'APPLICATION_CHIRPSTACK_ID',
   'MQTT_URL',
   'SMOKE_PROFILE_ID',
+  'SMOKE_PROFILE_ID_2',
   'TEMP_HUM_PROFILE_ID',
   'USERS_COLLECTION_ID',
   'NOTIFICATION_COLLECTION_ID',
@@ -50,6 +51,7 @@ const sensorCollectionID = process.env.SENSOR_COLLECTION_ID;
 const logCollectionId = process.env.LOG_COLLECTION_ID;
 const applicationChirpStackID = process.env.APPLICATION_CHIRPSTACK_ID;
 const smokeProfileID = process.env.SMOKE_PROFILE_ID;
+const smokeProfileID2 = process.env.SMOKE_PROFILE_ID_2;
 const tempHumProfileID = process.env.TEMP_HUM_PROFILE_ID;
 const speakerProfileID = process.env.SPEAKER_PROFILE_ID;
 const buttonProfileID = process.env.BUTTON_PROFILE_ID;
@@ -155,6 +157,59 @@ export const saveData = () => {
             lastNotification: null
           }
         );
+      }
+      if (deviceProfileID === smokeProfileID2) {
+        const rawSmokePercent = Number(temp.object?.smoke_percent);
+        const rawBatteryPercent = Number(temp.object?.battery_percent);
+        const smokePercent = Number.isFinite(rawSmokePercent) ? Math.max(0, Math.min(100, rawSmokePercent)) : 0;
+        const batteryPercent = Number.isFinite(rawBatteryPercent) ? Math.max(0, Math.min(100, rawBatteryPercent)) : 0;
+        const type = temp.object?.type;
+
+        let status = Status.ON;
+        const isAlarmType = (typeof type === 'string' && (type.toUpperCase() === 'ALARM_FIRE' || type.toUpperCase() === 'MANUAL_TEST')) || type === 3 || type === 2;
+
+        if (isAlarmType) {
+          status = Status.FIRE;
+        }
+
+        let sensorData;
+        try {
+          sensorData = await databases.getDocument(
+            buildingDatabaseID,
+            sensorCollectionID,
+            temp.deviceInfo.devEui
+          );
+        } catch (error) {
+          console.log('Error retrieving sensor data:', error);
+          sensorData = null;
+        }
+
+        if (status === Status.FIRE) {
+          console.log("Fire detected by smoke sensor (profile 2), sending notifications");
+          const message = 'Thiết bị ' + temp.deviceInfo.deviceName + ' đang ở mức độ cảnh báo cháy';
+          
+          const buildingId = sensorData?.buildingId || null;
+          await sendPushNotificationToUser(message, temp.deviceInfo.deviceName, buildingId);
+        }
+
+        await databases.updateDocument(
+          buildingDatabaseID,
+          sensorCollectionID,
+          temp.deviceInfo.devEui,
+          {
+            name: temp.deviceInfo.deviceName,
+            time: currentDate,
+            timeTurnOn: "",
+            battery: batteryPercent,
+            value: smokePercent,
+            humidity: 0,
+            smoke: smokePercent,
+            temperature: 0,
+            status: status,
+            lastNotification: null
+          }
+        );
+        console.log('Document updated successfully: ', temp.deviceInfo.devEui, status);
       }
       if (deviceProfileID === buttonProfileID) {
         var status;
@@ -345,7 +400,7 @@ async function checkSensorTimeouts() {
       
       // Determine timeout based on device profile
       let timeoutMinutes;
-      if (sensor.deviceProfileID === smokeProfileID) {
+      if (sensor.deviceProfileID === smokeProfileID || sensor.deviceProfileID === smokeProfileID2) {
         timeoutMinutes = smokeTimeout;
       } else if (sensor.deviceProfileID === speakerProfileID) {
         timeoutMinutes = speakerTimeout;
