@@ -664,15 +664,12 @@ async function createFireNotification({ sensorID, status, title, description, ty
       status: status,
       title: title,
       description: description,
-      type: type
+      type: type,
+      buildingID: buildingId
     };
 
     if (sensorID) {
       data.sensorID = sensorID;
-    }
-
-    if (buildingId) {
-      data.buildingId = buildingId;
     }
 
     await databases.createDocument(
