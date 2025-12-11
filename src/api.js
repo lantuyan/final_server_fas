@@ -1,6 +1,6 @@
 import express from 'express';
 import bodyParser from 'body-parser';
-import { sendPushNotificationToUser, triggerFireAlarmActions, logAppwrite } from './main.js';
+import { sendPushNotificationToUser, triggerFireAlarmActions, logAppwrite, createFireNotification } from './main.js';
 import { Client, Databases, Query } from 'node-appwrite';
 
 const router = express.Router();
@@ -35,6 +35,15 @@ router.post('/trigger-fire-alarm', async (req, res) => {
 
     // 2. Trigger fire alarm actions
     await triggerFireAlarmActions(buildingId);
+
+    // 3. Create fire notification record
+    await createFireNotification({
+      buildingId: buildingId,
+      status: 'fire',
+      title: 'Cảnh báo cháy',
+      description: customMessage,
+      type: 'user'
+    });
 
     // Log the manual trigger
     await logAppwrite(`Manual fire alarm trigger by user: ${name} in building: ${buildingId}`);

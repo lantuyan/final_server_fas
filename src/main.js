@@ -58,7 +58,7 @@ const buttonProfileID = process.env.BUTTON_PROFILE_ID;
 const userCollectionID = process.env.USERS_COLLECTION_ID;
 const notificationCollectionID = process.env.NOTIFICATION_COLLECTION_ID;
 
-const chirpstackToken =  process.env.CHIRPSTACK_API_TOKEN;
+const chirpstackToken = process.env.CHIRPSTACK_API_TOKEN;
 const chirpstackAPIURL = process.env.CHIRPSTACK_API_URL;
 const chirpstackDownlinkSpeakerData = process.env.CHIRPSTACK_DOWNLINK_SPEAKER_DATA;
 
@@ -72,7 +72,7 @@ const Status = {
 
 export const saveData = () => {
   // Start the sensor timeout checker
-  const timeoutCheckInterval = setInterval(checkSensorTimeouts, 60000*parseInt(process.env.TIMEOUT_CHECK_INTERVAL)); // Check every 15 minutes
+  const timeoutCheckInterval = setInterval(checkSensorTimeouts, 60000 * parseInt(process.env.TIMEOUT_CHECK_INTERVAL)); // Check every 15 minutes
 
   var client_mqtt = mqtt.connect(mqtt_url)
   const topicName = `application/${applicationChirpStackID}/device/+/event/up`;
@@ -106,7 +106,7 @@ export const saveData = () => {
         let heat = temp.object?.heat_alarm;
         let battery = temp.object?.batteryStatus === "Normal" ? 100 : 0;
         let temperature = temp.object?.temperature;
-        
+
         // Treat 'Triggered' as fire, 'Normal' as on
         if (smoke === "Triggered" || heat === "Triggered") {
           status = "fire";
@@ -115,7 +115,7 @@ export const saveData = () => {
         } else {
           status = "on";
         }
-        
+
         // Retrieve the sensor document to get the buildingId
         let sensorData;
         try {
@@ -128,11 +128,11 @@ export const saveData = () => {
           console.log('Error retrieving sensor data:', error);
           sensorData = null;
         }
-        
+
         if (status === "fire") {
           console.log("Fire detected by smoke sensor, sending notifications and downlinks");
           const message = 'Thiết bị ' + temp.deviceInfo.deviceName + ' đang ở mức độ cảnh báo cháy';
-          
+
           // Get buildingId from sensor and send notification to users with that buildingId
           const buildingId = sensorData?.buildingId || null;
           await sendPushNotificationToUser(message, temp.deviceInfo.deviceName, buildingId);
@@ -196,7 +196,7 @@ export const saveData = () => {
         if (status === Status.FIRE) {
           console.log("Fire detected by smoke sensor (profile 2), sending notifications");
           const message = 'Thiết bị ' + temp.deviceInfo.deviceName + ' đang ở mức độ cảnh báo cháy';
-          
+
           const buildingId = sensorData?.buildingId || null;
           await sendPushNotificationToUser(message, temp.deviceInfo.deviceName, buildingId);
 
@@ -239,7 +239,7 @@ export const saveData = () => {
         } else {
           status = "on";
         }
-        
+
         // Retrieve the sensor document to get the buildingId
         let sensorData;
         try {
@@ -252,11 +252,11 @@ export const saveData = () => {
           console.log('Error retrieving sensor data:', error);
           sensorData = null;
         }
-        
+
         if (status === "fire") {
           console.log("Fire detected by button sensor, sending notifications and downlinks");
           const message = 'Thiết bị ' + temp.deviceInfo.deviceName + ' đang ở mức độ cảnh báo cháy';
-          
+
           // Get buildingId from sensor and send notification to users with that buildingId
           const buildingId = sensorData?.buildingId || null;
           await sendPushNotificationToUser(message, temp.deviceInfo.deviceName, buildingId);
@@ -297,7 +297,7 @@ export const saveData = () => {
       }
       if (deviceProfileID === speakerProfileID) {
         var status = Status.ON;
-        
+
         // Check if fPort is 220 and data exists
         if (temp.fPort === 220 && temp.data) {
           try {
@@ -346,15 +346,15 @@ export const saveData = () => {
                 // Optionally, take further action here (e.g., alert, update DB, etc.)
                 await handleSpeakerMulticast(temp.deviceInfo.devEui);
               } else {
-                  // Update Appwrite document to set activeMulticastKey to null
-                  await databases.updateDocument(
-                    buildingDatabaseID,
-                    sensorCollectionID,
-                    temp.deviceInfo.devEui,
-                    {
-                      activeMulticastKey: null
-                    }
-                  );
+                // Update Appwrite document to set activeMulticastKey to null
+                await databases.updateDocument(
+                  buildingDatabaseID,
+                  sensorCollectionID,
+                  temp.deviceInfo.devEui,
+                  {
+                    activeMulticastKey: null
+                  }
+                );
                 console.log(`Set activeMulticastKey to null for device ${temp.deviceInfo.devEui}`);
                 console.log('Multicast check passed for device', temp.deviceInfo.devEui);
               }
@@ -374,7 +374,7 @@ export const saveData = () => {
             name: temp.deviceInfo.deviceName,
             time: currentDate,
             timeTurnOn: "",
-            battery: 0,  
+            battery: 0,
             value: 0,
             humidity: 0,
             smoke: 0,
@@ -407,12 +407,12 @@ export const saveData = () => {
 async function checkSensorTimeouts() {
   try {
     const currentTime = new Date();
-    
+
     // Get timeout values from environment variables with defaults
     const smokeTimeout = parseInt(process.env.SMOKE_SENSOR_TIMEOUT);
     const speakerTimeout = parseInt(process.env.SPEAKER_SENSOR_TIMEOUT);
     const buttonTimeout = parseInt(process.env.BUTTON_SENSOR_TIMEOUT);
-    
+
     // Get all sensors
     const sensors = await databases.listDocuments(
       buildingDatabaseID,
@@ -424,7 +424,7 @@ async function checkSensorTimeouts() {
       const lastUpdateTime = new Date(sensor.time);
       // Calculate the time difference in minutes
       const timeDifferenceMinutes = (currentTime - lastUpdateTime) / (1000 * 60);
-      
+
       // Determine timeout based on device profile
       let timeoutMinutes;
       if (sensor.deviceProfileID === smokeProfileID || sensor.deviceProfileID === smokeProfileID2) {
@@ -441,7 +441,7 @@ async function checkSensorTimeouts() {
       // If sensor hasn't updated in the specified time, mark it as off
       if (timeDifferenceMinutes > timeoutMinutes && sensor.status !== Status.OFF) {
         console.log(`Sensor ${sensor.name} (${sensor.$id}) of type ${sensor.deviceProfileID} hasn't updated in ${timeDifferenceMinutes.toFixed(2)} minutes. Timeout limit: ${timeoutMinutes} minutes. Marking as offline.`);
-        
+
         await databases.updateDocument(
           buildingDatabaseID,
           sensorCollectionID,
@@ -581,12 +581,12 @@ async function handleSpeakerMulticast(devEui) {
 async function sendPushNotificationToUser(message, name, buildingId = null) {
   try {
     let query = [Query.limit(100000), Query.offset(0)];
-    
+
     // If buildingId is provided, filter users by buildingId
     if (buildingId) {
       query.push(Query.equal('buildingId', buildingId));
     }
-    
+
     const users = await databases.listDocuments(
       buildingDatabaseID,
       userCollectionID,
@@ -617,7 +617,7 @@ async function sendPushNotificationToUser(message, name, buildingId = null) {
         "name": String(name),
         "time": "",
         "timeTurnOn": "",
-        "battery":"",
+        "battery": "",
         "type": "",
         "value": "",
         "status": "",
@@ -651,32 +651,41 @@ async function logAppwrite(log) {
 /**
  * Create a fire notification record in the notification collection
  * @param {Object} params - Notification parameters
- * @param {string} params.sensorID - The sensor ID (devEui)
+ * @param {string} [params.sensorID] - The sensor ID (devEui) - Optional
  * @param {string} params.status - Status: 'fire', 'warning', 'other'
  * @param {string} params.title - Notification title
  * @param {string} params.description - Notification description
- * @param {string} params.type - Type: 'smoke', 'button', 'alarm', 'other'
+ * @param {string} params.type - Type: 'smoke', 'button', 'alarm', 'other', 'user'
+ * @param {string} [params.buildingId] - Building ID - Optional but recommended
  */
-async function createFireNotification({ sensorID, status, title, description, type }) {
+async function createFireNotification({ sensorID, status, title, description, type, buildingId }) {
   try {
+    const data = {
+      status: status,
+      title: title,
+      description: description,
+      type: type
+    };
+
+    if (sensorID) {
+      data.sensorID = sensorID;
+    }
+
+    if (buildingId) {
+      data.buildingId = buildingId;
+    }
+
     await databases.createDocument(
       buildingDatabaseID,
       notificationCollectionID,
       ID.unique(),
-      {
-        sensorID: sensorID,
-        status: status,
-        title: title,
-        description: description,
-        type: type,
-        time: new Date().toISOString()
-      }
+      data
     );
-    console.log(`Fire notification created for sensor ${sensorID}, type: ${type}, status: ${status}`);
+    console.log(`Fire notification created for sensor ${sensorID || 'N/A'}, type: ${type}, status: ${status}, buildingId: ${buildingId || 'N/A'}`);
   } catch (error) {
     console.error('Error creating fire notification:', error);
   }
 }
 
 // Export the functions needed by api.js
-export { sendPushNotificationToUser, triggerFireAlarmActions, logAppwrite };
+export { sendPushNotificationToUser, triggerFireAlarmActions, logAppwrite, createFireNotification };
