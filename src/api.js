@@ -16,14 +16,21 @@ const databases = new Databases(client);
 // Fire alarm trigger endpoint
 router.post('/trigger-fire-alarm', async (req, res) => {
   try {
-    const { name, buildingId } = req.body;
-    
+    const { name, buildingId, floorName, apartmentName, roomName } = req.body;
+
     if (!name || !buildingId) {
       return res.status(400).json({ error: 'Name and buildingId are required in request body' });
     }
 
     // 1. Send push notification with custom message to users with matching buildingId
-    const customMessage = `Người dùng ${name} đang cảnh báo cháy trong toà nhà`;
+    let customMessage;
+    if (floorName || apartmentName || roomName) {
+      // Build location string from available values
+      const locationParts = [floorName, apartmentName, roomName].filter(Boolean);
+      customMessage = `${name} đang cảnh báo cháy tại ${locationParts.join(', ')}.`;
+    } else {
+      customMessage = `${name} đang cảnh báo cháy trong toà nhà`;
+    }
     await sendPushNotificationToUser(customMessage, name, buildingId);
 
     // 2. Trigger fire alarm actions
@@ -50,7 +57,7 @@ router.post('/reset-system', async (req, res) => {
     );
 
     // Update each sensor's status to 'off'
-    const updatePromises = sensors.documents.map(sensor => 
+    const updatePromises = sensors.documents.map(sensor =>
       databases.updateDocument(
         process.env.BUILDING_DATABASE_ID,
         process.env.SENSOR_COLLECTION_ID,
@@ -67,9 +74,9 @@ router.post('/reset-system', async (req, res) => {
     // Log the system reset
     await logAppwrite('System reset: All sensors set to offline status');
 
-    res.status(200).json({ 
-      message: 'System reset successful', 
-      sensorsUpdated: sensors.documents.length 
+    res.status(200).json({
+      message: 'System reset successful',
+      sensorsUpdated: sensors.documents.length
     });
   } catch (error) {
     console.error('Error resetting system:', error);
