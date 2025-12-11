@@ -137,6 +137,15 @@ export const saveData = () => {
           const buildingId = sensorData?.buildingId || null;
           await sendPushNotificationToUser(message, temp.deviceInfo.deviceName, buildingId);
           await triggerFireAlarmActions(buildingId);
+
+          // Create fire notification record
+          await createFireNotification({
+            sensorID: temp.deviceInfo.devEui,
+            status: 'fire',
+            title: 'Cảnh báo cháy',
+            description: message,
+            type: 'smoke'
+          });
         }
         console.log('Document updated successfully: ', temp.deviceInfo.devEui, status);
 
@@ -190,6 +199,15 @@ export const saveData = () => {
           
           const buildingId = sensorData?.buildingId || null;
           await sendPushNotificationToUser(message, temp.deviceInfo.deviceName, buildingId);
+
+          // Create fire notification record
+          await createFireNotification({
+            sensorID: temp.deviceInfo.devEui,
+            status: 'fire',
+            title: 'Cảnh báo cháy',
+            description: message,
+            type: 'smoke'
+          });
         }
 
         await databases.updateDocument(
@@ -243,6 +261,15 @@ export const saveData = () => {
           const buildingId = sensorData?.buildingId || null;
           await sendPushNotificationToUser(message, temp.deviceInfo.deviceName, buildingId);
           await triggerFireAlarmActions(buildingId);
+
+          // Create fire notification record
+          await createFireNotification({
+            sensorID: temp.deviceInfo.devEui,
+            status: 'fire',
+            title: 'Cảnh báo cháy',
+            description: message,
+            type: 'button'
+          });
 
           var caseTampered = temp.object?.data?.anti_tamper_status;
           if (caseTampered === "Not tampered") {
@@ -618,6 +645,36 @@ async function logAppwrite(log) {
     });
   } catch (error) {
     console.log('Error logging:', error);
+  }
+}
+
+/**
+ * Create a fire notification record in the notification collection
+ * @param {Object} params - Notification parameters
+ * @param {string} params.sensorID - The sensor ID (devEui)
+ * @param {string} params.status - Status: 'fire', 'warning', 'other'
+ * @param {string} params.title - Notification title
+ * @param {string} params.description - Notification description
+ * @param {string} params.type - Type: 'smoke', 'button', 'alarm', 'other'
+ */
+async function createFireNotification({ sensorID, status, title, description, type }) {
+  try {
+    await databases.createDocument(
+      buildingDatabaseID,
+      notificationCollectionID,
+      ID.unique(),
+      {
+        sensorID: sensorID,
+        status: status,
+        title: title,
+        description: description,
+        type: type,
+        time: new Date().toISOString()
+      }
+    );
+    console.log(`Fire notification created for sensor ${sensorID}, type: ${type}, status: ${status}`);
+  } catch (error) {
+    console.error('Error creating fire notification:', error);
   }
 }
 
