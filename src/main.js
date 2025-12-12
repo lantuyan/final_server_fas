@@ -14,6 +14,7 @@ throwIfMissing(process.env, [
   'APPWRITE_API_KEY',
   'BUILDING_DATABASE_ID',
   'SENSOR_COLLECTION_ID',
+  'SENSOR_DATA_COLLECTION_ID',
   'LOG_COLLECTION_ID',
   'APPLICATION_CHIRPSTACK_ID',
   'MQTT_URL',
@@ -48,6 +49,7 @@ client.setEndpoint(process.env.APPWRITE_URL)
 const databases = new Databases(client);
 const buildingDatabaseID = process.env.BUILDING_DATABASE_ID;
 const sensorCollectionID = process.env.SENSOR_COLLECTION_ID;
+const sensorDataCollectionID = process.env.SENSOR_DATA_COLLECTION_ID;
 const logCollectionId = process.env.LOG_COLLECTION_ID;
 const applicationChirpStackID = process.env.APPLICATION_CHIRPSTACK_ID;
 const smokeProfileID = process.env.SMOKE_PROFILE_ID;
@@ -166,6 +168,23 @@ export const saveData = () => {
             lastNotification: null
           }
         );
+        console.log('Document updated successfully: ', temp.deviceInfo.devEui, status);
+
+        // Create record in SensorDataCollection
+        try {
+          await databases.createDocument(
+            buildingDatabaseID,
+            sensorDataCollectionID,
+            ID.unique(),
+            {
+              sensorID: temp.deviceInfo.devEui,
+              value: temperature
+            }
+          );
+          console.log('SensorData record created for', temp.deviceInfo.devEui);
+        } catch (error) {
+          console.error('Error creating SensorData record:', error);
+        }
       }
       if (deviceProfileID === smokeProfileID2) {
         const rawSmokePercent = Number(temp.object?.smoke_percent);
@@ -228,6 +247,23 @@ export const saveData = () => {
           }
         );
         console.log('Document updated successfully: ', temp.deviceInfo.devEui, status);
+
+        // Create record in SensorDataCollection
+        try {
+          await databases.createDocument(
+            buildingDatabaseID,
+            sensorDataCollectionID,
+            ID.unique(),
+            {
+              sensorID: temp.deviceInfo.devEui,
+              value: smokePercent
+            }
+          );
+          console.log('SensorData record created for', temp.deviceInfo.devEui);
+        } catch (error) {
+          console.error('Error creating SensorData record:', error);
+        }
+
       }
       if (deviceProfileID === buttonProfileID) {
         var status;
