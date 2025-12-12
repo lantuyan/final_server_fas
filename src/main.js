@@ -146,7 +146,8 @@ export const saveData = () => {
             status: 'fire',
             title: 'Cảnh báo cháy',
             description: message,
-            type: 'smoke'
+            type: 'smoke',
+            buildingId: buildingId
           });
         }
         console.log('Document updated successfully: ', temp.deviceInfo.devEui, status);
@@ -178,7 +179,7 @@ export const saveData = () => {
             ID.unique(),
             {
               sensorID: temp.deviceInfo.devEui,
-              value: temperature
+              value: String(temperature)
             }
           );
           console.log('SensorData record created for', temp.deviceInfo.devEui);
@@ -225,7 +226,8 @@ export const saveData = () => {
             status: 'fire',
             title: 'Cảnh báo cháy',
             description: message,
-            type: 'smoke'
+            type: 'smoke',
+            buildingId: buildingId
           });
         }
 
@@ -256,7 +258,7 @@ export const saveData = () => {
             ID.unique(),
             {
               sensorID: temp.deviceInfo.devEui,
-              value: smokePercent
+              value: String(smokePercent)
             }
           );
           console.log('SensorData record created for', temp.deviceInfo.devEui);
