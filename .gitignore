@@ -128,3 +128,6 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+# Dev server credentials / local Claude notes
+.dev-server.env
+CLAUDE.local.md

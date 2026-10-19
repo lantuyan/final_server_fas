@@ -1,6 +1,6 @@
 import express from 'express';
 import bodyParser from 'body-parser';
-import { sendPushNotificationToUser, triggerFireAlarmActions, logAppwrite, createFireNotification } from './main.js';
+import { sendPushNotificationToUser, triggerFireAlarmActions, logAppwrite, createFireNotification, fireAlarmEnabled } from './main.js';
 import { Client, Databases, Query } from 'node-appwrite';
 
 const router = express.Router();
@@ -20,6 +20,11 @@ router.post('/trigger-fire-alarm', async (req, res) => {
 
     if (!name || !buildingId) {
       return res.status(400).json({ error: 'Name and buildingId are required in request body' });
+    }
+
+    if (!fireAlarmEnabled) {
+      console.log(`FIRE_ALARM_ENABLED=false: bỏ qua trigger-fire-alarm từ ${name}`);
+      return res.status(503).json({ error: 'Fire alarm is temporarily disabled (FIRE_ALARM_ENABLED=false)' });
     }
 
     // 1. Send push notification with custom message to users with matching buildingId
@@ -65,20 +70,24 @@ router.post('/reset-system', async (req, res) => {
       [Query.limit(100000)]
     );
 
-    // Update each sensor's status to 'off'
-    const updatePromises = sensors.documents.map(sensor =>
-      databases.updateDocument(
-        process.env.BUILDING_DATABASE_ID,
-        process.env.SENSOR_COLLECTION_ID,
-        sensor.$id,
-        {
-          status: 'off',
-          time: new Date()
-        }
-      )
-    );
-
-    await Promise.all(updatePromises);
+    // Update each sensor's status to 'off' in small batches:
+    // firing all updates at once exhausts Appwrite's MariaDB connections
+    // ("Too many connections") and the reset fails part-way.
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < sensors.documents.length; i += BATCH_SIZE) {
+      const batch = sensors.documents.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(sensor =>
+        databases.updateDocument(
+          process.env.BUILDING_DATABASE_ID,
+          process.env.SENSOR_COLLECTION_ID,
+          sensor.$id,
+          {
+            status: 'off',
+            time: new Date()
+          }
+        )
+      ));
+    }
 
     // Log the system reset
     await logAppwrite('System reset: All sensors set to offline status');

@@ -72,6 +72,19 @@ const Status = {
   FIRE: 'fire'
 };
 
+// FIRE_ALARM_ENABLED=false tạm tắt cảnh báo cháy (dùng khi đang fix lỗi):
+// cảm biến không bị set sang 'fire', không gửi push, không hú còi, không tạo notification.
+// Không set biến này thì giữ hành vi cũ (bật).
+const fireAlarmEnabled = process.env.FIRE_ALARM_ENABLED !== 'false';
+
+function suppressFireIfDisabled(status, deviceName) {
+  if (status === Status.FIRE && !fireAlarmEnabled) {
+    console.log(`FIRE_ALARM_ENABLED=false: bỏ qua cảnh báo cháy từ ${deviceName}`);
+    return Status.ON;
+  }
+  return status;
+}
+
 export const saveData = () => {
   // Start the sensor timeout checker
   const timeoutCheckInterval = setInterval(checkSensorTimeouts, 60000 * parseInt(process.env.TIMEOUT_CHECK_INTERVAL)); // Check every 15 minutes
@@ -117,6 +130,7 @@ export const saveData = () => {
         } else {
           status = "on";
         }
+        status = suppressFireIfDisabled(status, temp.deviceInfo.deviceName);
 
         // Retrieve the sensor document to get the buildingId
         let sensorData;
@@ -200,6 +214,7 @@ export const saveData = () => {
         if (isAlarmType) {
           status = Status.FIRE;
         }
+        status = suppressFireIfDisabled(status, temp.deviceInfo.deviceName);
 
         let sensorData;
         try {
@@ -277,6 +292,7 @@ export const saveData = () => {
         } else {
           status = "on";
         }
+        status = suppressFireIfDisabled(status, temp.deviceInfo.deviceName);
 
         // Retrieve the sensor document to get the buildingId
         let sensorData;
@@ -723,4 +739,4 @@ async function createFireNotification({ sensorID, status, title, description, ty
 }
 
 // Export the functions needed by api.js
-export { sendPushNotificationToUser, triggerFireAlarmActions, logAppwrite, createFireNotification };
+export { sendPushNotificationToUser, triggerFireAlarmActions, logAppwrite, createFireNotification, fireAlarmEnabled };
